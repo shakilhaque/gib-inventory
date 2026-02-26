@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # React Frontend (Nginx)
+  # ─────────────────────────────────────────────
+  bank-inventory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: bank-inventory-app
+    image: bank-inventory:latest
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - bank-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.bank.app=inventory"
+      - "com.bank.version=1.0.0"
+
+networks:
+  bank-network:
+    driver: bridge
+
+volumes:
+  nginx-logs:
