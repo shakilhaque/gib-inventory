@@ -35,6 +35,11 @@ export default function App() {
   const [notification, setNotification] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
+  const [historyModal, setHistoryModal] = useState(null);
+  const [historyData, setHistoryData] = useState({ rows: [], total: 0, page: 1 });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState({ ip: "", action: "" });
+
 
   const emptyForm = { name: "", hostname: "", ip: "", subnet: "255.255.255.0", gateway: "", mac: "", usb: "", floor: "", ext: "", internet: "", faceplate: "", portNumber: "", switch: "", department: "" };
   const [form, setForm] = useState(emptyForm);
@@ -61,6 +66,36 @@ export default function App() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (user) fetchItems(); }, [user]);
+
+  const fetchHistory = async (ip, action, page) => {
+    ip = ip || ""; action = action || ""; page = page || 1;
+    setHistoryLoading(true);
+    try {
+      const params = new URLSearchParams({ page, limit: 50 });
+      if (ip) params.append("ip", ip);
+      if (action) params.append("action", action);
+      const res = await fetch("/api/history?" + params, { headers: { Authorization: "Bearer " + getToken() } });
+      if (!res.ok) throw new Error("Failed");
+      setHistoryData(await res.json());
+    } catch (e) { console.error(e); }
+    finally { setHistoryLoading(false); }
+  };
+
+  const exportHistory = (ip, action) => {
+    ip = ip || ""; action = action || "";
+    const params = new URLSearchParams();
+    if (ip) params.append("ip", ip);
+    if (action) params.append("action", action);
+    fetch("/api/history/export?" + params, { headers: { Authorization: "Bearer " + getToken() } })
+      .then(r => r.blob()).then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ip ? "ip_history_" + ip.replace(/\./g,"_") + ".csv" : "ip_history_all.csv";
+        a.click();
+        notify("History report downloaded!");
+      });
+  };
+
 
   const notify = (msg, type = "success") => {
     setNotification({ msg, type });
@@ -99,6 +134,14 @@ export default function App() {
 
 
   const uniqueDepts = useMemo(() => [...new Set(items.map(i => i.department).filter(Boolean))].sort(), [items]);
+  const [filterDuplicates, setFilterDuplicates] = useState(false);
+
+  const duplicateIPs = useMemo(() => {
+    const ipCount = {};
+    items.forEach(i => { if(i.ip) ipCount[i.ip] = (ipCount[i.ip]||0)+1; });
+    return new Set(Object.keys(ipCount).filter(ip => ipCount[ip] > 1));
+  }, [items]);
+
 
   const filtered = useMemo(() => {
     return items.filter(i => {
@@ -110,12 +153,13 @@ export default function App() {
       if (filterUSB === "No" && i.usb === "Yes") return false;
       if (filterInternet === "Yes" && i.internet !== "Yes") return false;
       if (filterInternet === "No" && i.internet === "Yes") return false;
+      if (filterDuplicates && !duplicateIPs.has(i.ip)) return false;
       return true;
     }).sort((a, b) => {
       const av = a[sortField] || "", bv = b[sortField] || "";
       return sortDir === "asc" ? String(av).localeCompare(String(bv), undefined, {numeric:true}) : String(bv).localeCompare(String(av), undefined, {numeric:true});
     });
-  }, [items, search, filterDept, filterFloor, filterUSB, filterInternet, sortField, sortDir]);
+  }, [items, search, filterDept, filterFloor, filterUSB, filterInternet, sortField, sortDir, filterDuplicates, duplicateIPs]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -316,7 +360,7 @@ export default function App() {
 
         <div style={{padding:"4px 12px",flex:1,overflowY:"auto"}}>
           {[{id:"dashboard",icon:"⊞",label:"Dashboard"},{id:"inventory",icon:"🖥",label:"IP Inventory"},{id:"network",icon:"🌐",label:"Network View"},{id:"reports",icon:"📊",label:"Reports"}].map(item => (
-            <div key={item.id} className={`nv ${view===item.id?"nva":""}`} onClick={()=>{setView(item.id);setPage(1);}}
+            <div key={item.id} className={`nv ${view===item.id?"nva":""}`} onClick={()=>{setView(item.id);setPage(1);if(item.id==="history")fetchHistory("","",1);}}
               style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",borderRadius:9,cursor:"pointer",marginBottom:3,color:view===item.id?"#fff":"rgba(255,255,255,0.45)",fontSize:14,transition:"all 0.2s",borderLeft:"3px solid transparent"}}>
               <span style={{fontSize:17}}>{item.icon}</span> {item.label}
               {item.id==="inventory" && <span style={{marginLeft:"auto",background:"rgba(200,168,75,0.25)",color:"#c8a84b",fontSize:10,fontWeight:700,borderRadius:6,padding:"2px 6px"}}>{items.length}</span>}
@@ -437,6 +481,11 @@ export default function App() {
                   <option value="No">Internet: No</option>
                 </select>
                 <div style={{color:"#64748b",fontSize:12,whiteSpace:"nowrap",fontWeight:600}}>{filtered.length} record{filtered.length!==1?"s":""}</div>
+                {duplicateIPs.size>0&&(
+                  <button onClick={()=>{setFilterDuplicates(f=>!f);setPage(1);}} style={{padding:"9px 14px",borderRadius:9,border:filterDuplicates?"none":"1.5px solid #ef4444",background:filterDuplicates?"#ef4444":"#fff",color:filterDuplicates?"#fff":"#ef4444",fontSize:12,cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",gap:5,transition:"all 0.2s"}}>
+                    🔴 Duplicate IPs ({duplicateIPs.size})
+                  </button>
+                )}
                 {(search||filterDept||filterFloor||filterUSB||filterInternet)&&(
                   <button onClick={()=>{setSearch("");setFilterDept("");setFilterFloor("");setFilterUSB("");setFilterInternet("");setPage(1);}} style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",color:"#ef4444",fontWeight:600}}>✕ Clear</button>
                 )}
@@ -461,11 +510,11 @@ export default function App() {
                       {paged.length===0?(
                         <tr><td colSpan={9} style={{textAlign:"center",padding:"48px 24px",color:"#94a3b8",fontSize:15}}>No records match your filter criteria.</td></tr>
                       ):paged.map((item,i)=>(
-                        <tr key={item.id} className="tr" style={{borderBottom:"1px solid #f1f5f9",transition:"background 0.12s"}}>
+                        <tr key={item.id} className="tr" style={{borderBottom:"1px solid #f1f5f9",transition:"background 0.12s",background:duplicateIPs.has(item.ip)?"#fff5f5":""}}>
                           <td style={{padding:"11px 14px",fontSize:12,fontWeight:700,color:"#6366f1",fontFamily:"monospace",whiteSpace:"nowrap"}}>{item.id}</td>
                           <td style={{padding:"11px 14px",fontSize:13,color:"#0f172a",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name||<span style={{color:"#cbd5e1",fontStyle:"italic"}}>—</span>}</td>
                           <td style={{padding:"11px 14px",fontSize:12,fontFamily:"monospace",color:"#1e40af",whiteSpace:"nowrap"}}>{item.hostname||"—"}</td>
-                          <td style={{padding:"11px 14px",fontSize:12,fontFamily:"monospace",color:"#059669",whiteSpace:"nowrap"}}>{item.ip||"—"}</td>
+                          <td style={{padding:"11px 14px",fontSize:12,fontFamily:"monospace",color:duplicateIPs.has(item.ip)?"#dc2626":"#059669",fontWeight:duplicateIPs.has(item.ip)?800:400,whiteSpace:"nowrap"}}>{item.ip||"—"}{duplicateIPs.has(item.ip)&&<span style={{marginLeft:5,background:"#fee2e2",color:"#dc2626",fontSize:10,fontWeight:700,borderRadius:5,padding:"1px 5px"}}>DUP</span>}</td>
                           <td style={{padding:"11px 14px",fontSize:11,fontFamily:"monospace",color:"#64748b",whiteSpace:"nowrap"}}>{item.mac||"—"}</td>
                           <td style={{padding:"11px 14px",fontSize:12,color:"#475569",whiteSpace:"nowrap"}}>{item.floor||"—"}</td>
                           <td style={{padding:"11px 14px",fontSize:12,color:"#475569",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.department||<span style={{color:"#e2e8f0"}}>—</span>}</td>
@@ -480,6 +529,7 @@ export default function App() {
                               <button className="ic" onClick={()=>setDetailItem(item)} title="View Details" style={{background:"none",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:14,transition:"background 0.12s"}}>👁</button>
                               <button className="ic" onClick={()=>openEdit(item)} title="Edit" style={{background:"none",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:14,transition:"background 0.12s"}}>✏️</button>
                               <button className="ic" onClick={()=>setDeleteConfirm(item)} title="Delete" style={{background:"none",border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer",fontSize:14,transition:"background 0.12s"}}>🗑️</button>
+                              <button className="ic" onClick={()=>{ setHistoryModal({ip:item.ip,hostname:item.hostname}); fetchHistory(item.ip); }} title="IP History" style={{background:"none",border:"none",borderRadius:7,width:30,height:30,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",color:"#7c3aed",transition:"all 0.15s"}} onMouseEnter={e=>e.currentTarget.style.background="#ede9fe"} onMouseLeave={e=>e.currentTarget.style.background="none"}>🕐</button>
                             </div>
                           </td>
                         </tr>
@@ -579,10 +629,165 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* HISTORY VIEW */}
+          {view==="history"&&(
+            <div style={{animation:"slideIn 0.4s ease"}}>
+              <div style={{background:"#fff",borderRadius:14,padding:24,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:18}}>
+                  <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#0f172a"}}>🕐 IP Usage History</h3>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <input value={historyFilter.ip} onChange={e=>setHistoryFilter(p=>({...p,ip:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&fetchHistory(historyFilter.ip,historyFilter.action,1)}
+                      placeholder="Filter by IP..." style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,width:170,outline:"none"}} />
+                    <select value={historyFilter.action} onChange={e=>setHistoryFilter(p=>({...p,action:e.target.value}))}
+                      style={{padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,background:"#fff",outline:"none"}}>
+                      <option value="">All Actions</option>
+                      <option value="ASSIGNED">ASSIGNED</option>
+                      <option value="UPDATED">UPDATED</option>
+                      <option value="RELEASED">RELEASED</option>
+                      <option value="IP_CHANGED">IP CHANGED</option>
+                    </select>
+                    <button onClick={()=>fetchHistory(historyFilter.ip,historyFilter.action,1)} style={{padding:"8px 14px",background:"#3b82f6",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:600}}>🔍 Search</button>
+                    <button onClick={()=>exportHistory(historyFilter.ip,historyFilter.action)} style={{padding:"8px 14px",background:"#059669",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:600}}>📥 Export CSV</button>
+                    <button onClick={()=>{ setHistoryFilter({ip:"",action:""}); fetchHistory("","",1); }} style={{padding:"8px 12px",background:"#f8fafc",color:"#475569",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,cursor:"pointer"}}>✕ Clear</button>
+                  </div>
+                </div>
+                {historyLoading?(<div style={{textAlign:"center",padding:"40px",color:"#94a3b8"}}>Loading history...</div>):historyData.rows.length===0?(
+                  <div style={{textAlign:"center",padding:"40px",color:"#94a3b8",fontSize:14}}>No history records found. Records appear here when IPs are assigned, updated or released.</div>
+                ):(
+                  <div style={{overflowX:"auto"}}>
+                    <div style={{marginBottom:10,fontSize:12,color:"#64748b"}}>Showing {historyData.rows.length} of {historyData.total} records</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead><tr style={{background:"#f8fafc"}}>
+                        {["#","IP Address","Action","Hostname","User/Device","Department","Floor","MAC","Changed By","Date & Time"].map(h=>(
+                          <th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>
+                        ))}</tr></thead>
+                      <tbody>
+                        {historyData.rows.map((h,i)=>(
+                          <tr key={h.id} style={{borderBottom:"1px solid #f1f5f9"}} onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"} onMouseLeave={e=>e.currentTarget.style.background=""}>
+                            <td style={{padding:"10px 12px",color:"#94a3b8",fontSize:11}}>{i+1}</td>
+                            <td style={{padding:"10px 12px"}}><span style={{fontFamily:"monospace",fontWeight:700,color:"#1e40af",background:"#eff6ff",padding:"2px 8px",borderRadius:5,cursor:"pointer"}} onClick={()=>{ setHistoryModal({ip:h.ip,hostname:h.hostname}); setHistoryData({rows:[],total:0,page:1}); fetchHistory(h.ip); }}>{h.ip||"—"}</span></td>
+                            <td style={{padding:"10px 12px"}}><span style={{padding:"3px 9px",borderRadius:20,fontSize:11,fontWeight:700,background:h.action==="ASSIGNED"?"#dcfce7":h.action==="RELEASED"?"#fee2e2":h.action==="IP_CHANGED"?"#fef3c7":"#eff6ff",color:h.action==="ASSIGNED"?"#15803d":h.action==="RELEASED"?"#dc2626":h.action==="IP_CHANGED"?"#d97706":"#1d4ed8"}}>{h.action}</span></td>
+                            <td style={{padding:"10px 12px",fontFamily:"monospace",fontSize:12,color:"#334155"}}>{h.hostname||"—"}</td>
+                            <td style={{padding:"10px 12px",fontSize:12,color:"#334155"}}>{h.name||"—"}</td>
+                            <td style={{padding:"10px 12px",fontSize:12,color:"#64748b"}}>{h.department||"—"}</td>
+                            <td style={{padding:"10px 12px",fontSize:12,color:"#64748b"}}>{h.floor||"—"}</td>
+                            <td style={{padding:"10px 12px",fontFamily:"monospace",fontSize:11,color:"#64748b"}}>{h.mac||"—"}</td>
+                            <td style={{padding:"10px 12px",fontSize:12}}><span style={{fontWeight:600,color:"#7c3aed"}}>{h.changedByName||h.changedBy||"—"}</span><div style={{fontSize:10,color:"#94a3b8"}}>{h.changedBy}</div></td>
+                            <td style={{padding:"10px 12px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}}>{h.changedAt||"—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {historyData.total>50&&(
+                      <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:16}}>
+                        {historyData.page>1&&<button onClick={()=>fetchHistory(historyFilter.ip,historyFilter.action,historyData.page-1)} style={{padding:"6px 14px",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:13,background:"#fff"}}>← Prev</button>}
+                        <span style={{padding:"6px 14px",fontSize:13,color:"#64748b"}}>Page {historyData.page}</span>
+                        {historyData.rows.length===50&&<button onClick={()=>fetchHistory(historyFilter.ip,historyFilter.action,historyData.page+1)} style={{padding:"6px 14px",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:13,background:"#fff"}}>Next →</button>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ── DETAIL MODAL ── */}
+      {/* IP HISTORY MODAL */}
+      {historyModal&&(
+        <div onClick={()=>setHistoryModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:720,maxHeight:"85vh",overflow:"auto",boxShadow:"0 25px 60px rgba(0,0,0,0.25)"}}>
+            <div style={{background:"linear-gradient(135deg,#4c1d95,#7c3aed)",padding:"20px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:1}}>
+              <div>
+                <div style={{color:"rgba(255,255,255,0.6)",fontSize:11,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>IP Usage History</div>
+                <div style={{color:"#fff",fontSize:18,fontWeight:800,marginTop:4,fontFamily:"monospace"}}>{historyModal.ip}</div>
+                {historyModal.hostname&&<div style={{color:"rgba(255,255,255,0.5)",fontSize:12,marginTop:2}}>{historyModal.hostname}</div>}
+              </div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>exportHistory(historyModal.ip)} style={{padding:"7px 14px",background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",fontSize:12,cursor:"pointer",fontWeight:600}}>📥 Export CSV</button>
+                <button onClick={()=>setHistoryModal(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:8,width:34,height:34,cursor:"pointer",fontSize:18,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 24px"}}>
+              {historyLoading?(<div style={{textAlign:"center",padding:"40px",color:"#94a3b8"}}>Loading...</div>
+              ):historyData.rows.length===0?(
+                <div style={{textAlign:"center",padding:"40px",color:"#94a3b8",fontSize:14}}>No history found for this IP address.</div>
+              ):(
+                <div>
+                  <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>{historyData.total} event(s) for <b style={{color:"#1e40af"}}>{historyModal.ip}</b></div>
+                  {historyData.rows.map((h,i)=>(
+                    <div key={h.id} style={{display:"flex",gap:14,marginBottom:16}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                        <div style={{width:38,height:38,borderRadius:"50%",background:h.action==="ASSIGNED"?"#dcfce7":h.action==="RELEASED"?"#fee2e2":h.action==="IP_CHANGED"?"#fef3c7":"#eff6ff",border:"2px solid "+(h.action==="ASSIGNED"?"#16a34a":h.action==="RELEASED"?"#dc2626":h.action==="IP_CHANGED"?"#d97706":"#3b82f6"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+                          {h.action==="ASSIGNED"?"✅":h.action==="RELEASED"?"🔴":h.action==="IP_CHANGED"?"🔄":"✏️"}
+                        </div>
+                        {i<historyData.rows.length-1&&<div style={{width:2,flex:1,background:"#e2e8f0",minHeight:12,margin:"3px 0"}}/>}
+                      </div>
+                      <div style={{flex:1,background:"#f8fafc",borderRadius:10,padding:"12px 16px",border:"1px solid #f1f5f9"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:6}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:h.action==="ASSIGNED"?"#dcfce7":h.action==="RELEASED"?"#fee2e2":h.action==="IP_CHANGED"?"#fef3c7":"#eff6ff",color:h.action==="ASSIGNED"?"#15803d":h.action==="RELEASED"?"#dc2626":h.action==="IP_CHANGED"?"#d97706":"#1d4ed8"}}>{h.action}</span>
+                            {h.hostname&&<span style={{fontFamily:"monospace",fontSize:12,color:"#334155",fontWeight:600}}>{h.hostname}</span>}
+                          </div>
+                          <span style={{fontSize:11,color:"#94a3b8",whiteSpace:"nowrap"}}>{h.changedAt}</span>
+                        </div>
+                        <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 16px"}}>
+                          {[
+                            ["👤 User/Device", (h.newData||h.oldData)?.name],
+                            ["🖥 Hostname",    (h.newData||h.oldData)?.hostname],
+                            ["🌐 IP Address",  (h.newData||h.oldData)?.ip],
+                            ["🔀 Subnet",      (h.newData||h.oldData)?.subnet],
+                            ["🚪 Gateway",     (h.newData||h.oldData)?.gateway],
+                            ["📡 MAC Address", (h.newData||h.oldData)?.mac],
+                            ["🏢 Department",  (h.newData||h.oldData)?.department],
+                            ["📍 Floor",       (h.newData||h.oldData)?.floor],
+                            ["🔌 USB",         (h.newData||h.oldData)?.usb],
+                            ["🌍 Internet",    (h.newData||h.oldData)?.internet],
+                            ["🔧 Faceplate",   (h.newData||h.oldData)?.faceplate],
+                            ["🔢 Port No.",    (h.newData||h.oldData)?.port_number],
+                            ["⚡ Switch",      (h.newData||h.oldData)?.switch_name],
+                            ["📞 Extension",   (h.newData||h.oldData)?.ext],
+                          ].filter(([,v])=>v).map(([label,val])=>(
+                            <div key={label} style={{display:"flex",gap:4,alignItems:"flex-start"}}>
+                              <span style={{fontSize:11,color:"#94a3b8",minWidth:90,flexShrink:0}}>{label}</span>
+                              <span style={{fontSize:11,fontWeight:600,color:"#334155",fontFamily:label.includes("IP")||label.includes("MAC")||label.includes("Subnet")||label.includes("Gateway")?"monospace":"inherit",wordBreak:"break-all"}}>{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {(h.action==="UPDATED"||h.action==="IP_CHANGED")&&h.oldData&&h.newData&&(()=>{
+                          const fields={name:"User/Device",hostname:"Hostname",ip:"IP Address",mac:"MAC",department:"Department",floor:"Floor",subnet:"Subnet",gateway:"Gateway",usb:"USB",internet:"Internet"};
+                          const changed=Object.keys(fields).filter(k=>(h.oldData[k]||"")!==(h.newData[k]||""));
+                          if(!changed.length) return null;
+                          return(
+                            <div style={{marginTop:10,background:"#fffbeb",borderRadius:8,padding:"8px 12px",border:"1px solid #fde68a"}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"#92400e",letterSpacing:1,marginBottom:6}}>CHANGED FIELDS</div>
+                              {changed.map(k=>(
+                                <div key={k} style={{display:"flex",gap:8,fontSize:11,marginBottom:4,alignItems:"flex-start"}}>
+                                  <span style={{color:"#92400e",minWidth:80,fontWeight:600}}>{fields[k]}</span>
+                                  <span style={{color:"#dc2626",textDecoration:"line-through",fontFamily:"monospace"}}>{h.oldData[k]||"—"}</span>
+                                  <span style={{color:"#64748b"}}>→</span>
+                                  <span style={{color:"#16a34a",fontFamily:"monospace",fontWeight:600}}>{h.newData[k]||"—"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:11,color:"#7c3aed"}}>Changed by: <b>{h.changedByName||h.changedBy}</b></span>
+                          <span style={{fontSize:10,color:"#94a3b8"}}>{h.changedBy}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {detailItem&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease",padding:20}} onClick={()=>setDetailItem(null)}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",overflow:"auto",boxShadow:"0 40px 80px rgba(0,0,0,0.35)",animation:"slideIn 0.3s ease"}}>
