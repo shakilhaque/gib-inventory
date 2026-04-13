@@ -188,6 +188,15 @@ export default function App() {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
           body: JSON.stringify(form),
         });
+        if (res.status === 409) {
+          const err = await res.json();
+          const ex = err.existing;
+          notify(
+            `⛔ Duplicate IP: ${form.ip} is already assigned to ${ex.hostname||ex.name||"Asset #"+ex.id} (${ex.department||"No dept"})`,
+            "error"
+          );
+          return;
+        }
         if (!res.ok) throw new Error("Create failed");
         const created = await res.json();
         setItems(prev => [...prev, { ...created, id: String(created.id) }]);

@@ -189,6 +189,29 @@ app.post("/api/inventory", authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // ── Duplicate IP check ──────────────────────────────────────────────────
+    if (ip && ip.trim()) {
+      const dupCheck = await client.query(
+        "SELECT id, hostname, name, department FROM inventory WHERE TRIM(ip) = TRIM($1) LIMIT 1",
+        [ip]
+      );
+      if (dupCheck.rowCount > 0) {
+        await client.query("ROLLBACK");
+        const existing = dupCheck.rows[0];
+        return res.status(409).json({
+          error: "DUPLICATE_IP",
+          message: `IP address ${ip} is already assigned.`,
+          existing: {
+            id: existing.id,
+            hostname: existing.hostname,
+            name: existing.name,
+            department: existing.department,
+          },
+        });
+      }
+    }
+
     const result = await client.query(
       `INSERT INTO inventory
          (name, hostname, ip, subnet, gateway, mac, usb, floor, ext,
