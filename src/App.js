@@ -14,6 +14,8 @@ const INTERNET_OPTS = ["Yes","No",""];
 
 export default function App() {
   const [user, setUser] = useState(() => {
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
+
     try { const s = localStorage.getItem("inv_user"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
@@ -319,7 +321,7 @@ export default function App() {
   return (
     <div style={{minHeight:"100vh",background:"#eef2f7",fontFamily:"'Segoe UI',sans-serif",display:"flex"}}>
       <style>{`
-        @keyframes slideIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
         @keyframes fadeIn{from{opacity:0}to{opacity:1}}
         @keyframes notifIn{0%{transform:translateX(110%)}10%,88%{transform:translateX(0)}100%{transform:translateX(120%)}}
         @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
@@ -333,6 +335,35 @@ export default function App() {
         ::-webkit-scrollbar-track{background:#f1f5f9}
         ::-webkit-scrollbar-thumb{background:#c4cdd6;border-radius:3px}
         input,select,textarea{font-family:inherit!important}
+        .sidebar{width:252px;background:linear-gradient(180deg,#0a1628 0%,#0d2044 60%,#0a1a38 100%);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0;transition:transform 0.3s ease;z-index:200;}
+        .main-content{flex:1;min-width:0;margin-left:0;}
+        .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:199;}
+        .hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:#0f172a;font-size:22px;}
+        .topbar-title{font-size:19px;}
+        .topbar-actions{display:flex;gap:8px;align-items:center;}
+        .dash-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px;}
+        .filter-bar{display:flex;flex-wrap:wrap;gap:10px;padding:16px 20px;border-bottom:1px solid #f1f5f9;}
+        @media(max-width:900px){
+          .dash-grid{grid-template-columns:repeat(3,1fr)!important;}
+        }
+        @media(max-width:768px){
+          .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%);z-index:200;}
+          .sidebar.open{transform:translateX(0);}
+          .sidebar-overlay.open{display:block;}
+          .main-content{margin-left:0!important;}
+          .hamburger{display:flex!important;align-items:center;justify-content:center;}
+          .dash-grid{grid-template-columns:repeat(2,1fr)!important;}
+          .topbar-title{font-size:15px!important;}
+          .topbar-actions .abtn span{display:none;}
+          .filter-bar{padding:12px!important;}
+          .filter-bar input,.filter-bar select{width:100%!important;box-sizing:border-box;}
+          .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+          .resp-modal{margin:0!important;border-radius:16px 16px 0 0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;max-width:100%!important;max-height:90vh!important;}
+          .resp-modal-wrap{align-items:flex-end!important;}
+        }
+        @media(max-width:480px){
+          .dash-grid{grid-template-columns:1fr 1fr!important;}
+        }
       `}</style>
 
       {/* Notification */}
@@ -343,7 +374,8 @@ export default function App() {
       )}
 
       {/* ── SIDEBAR ── */}
-      <div style={{width:252,background:"linear-gradient(180deg,#0a1628 0%,#0d2044 60%,#0a1a38 100%)",display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,bottom:0,zIndex:100,boxShadow:"4px 0 24px rgba(0,0,0,0.3)"}}>
+      <div className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+      <div className={`sidebar-overlay ${sidebarOpen ? "open" : ""}`} onClick={()=>setSidebarOpen(false)} />
         <div style={{padding:"24px 20px 16px"}}>
           <div style={{display:"flex",alignItems:"center",gap:11}}>
             <div style={{width:44,height:44,borderRadius:13,background:"linear-gradient(135deg,#c8a84b,#f0d060)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,boxShadow:"0 4px 14px rgba(200,168,75,0.4)"}}>🏦</div>
@@ -360,7 +392,7 @@ export default function App() {
 
         <div style={{padding:"4px 12px",flex:1,overflowY:"auto"}}>
           {[{id:"dashboard",icon:"⊞",label:"Dashboard"},{id:"inventory",icon:"🖥",label:"IP Inventory"},{id:"network",icon:"🌐",label:"Network View"},{id:"reports",icon:"📊",label:"Reports"}].map(item => (
-            <div key={item.id} className={`nv ${view===item.id?"nva":""}`} onClick={()=>{setView(item.id);setPage(1);if(item.id==="history")fetchHistory("","",1);}}
+            <div key={item.id} className={`nv ${view===item.id?"nva":""}`} onClick={()=>{setView(item.id);setPage(1);if(window.innerWidth<768)setSidebarOpen(false);if(item.id==="history")fetchHistory("","",1);}}
               style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",borderRadius:9,cursor:"pointer",marginBottom:3,color:view===item.id?"#fff":"rgba(255,255,255,0.45)",fontSize:14,transition:"all 0.2s",borderLeft:"3px solid transparent"}}>
               <span style={{fontSize:17}}>{item.icon}</span> {item.label}
               {item.id==="inventory" && <span style={{marginLeft:"auto",background:"rgba(200,168,75,0.25)",color:"#c8a84b",fontSize:10,fontWeight:700,borderRadius:6,padding:"2px 6px"}}>{items.length}</span>}
@@ -383,10 +415,11 @@ export default function App() {
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{marginLeft:252,flex:1}}>
+      <div className="main-content">
         {/* Top bar */}
-        <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
+        <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"12px clamp(12px,3vw,28px)",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
           <div>
+          <button className="hamburger" onClick={()=>setSidebarOpen(o=>!o)} style={{marginRight:8}}>☰</button>
             <h2 style={{margin:0,fontSize:19,fontWeight:800,color:"#0f172a"}}>{view==="dashboard"?"Dashboard":view==="inventory"?"IP Inventory":view==="network"?"Network View":"Reports & Analytics"}</h2>
             <div style={{color:"#94a3b8",fontSize:12,marginTop:1}}>{new Date().toLocaleDateString("en-BD",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
           </div>
@@ -398,12 +431,12 @@ export default function App() {
           )}
         </div>
 
-        <div style={{padding:"24px 28px"}}>
+        <div style={{padding:"clamp(12px,3vw,28px) clamp(12px,3vw,28px)"}}>
 
           {/* ── DASHBOARD ── */}
           {view==="dashboard"&&(
             <div style={{animation:"slideIn 0.4s ease"}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:16,marginBottom:24}}>
+              <div className="dash-grid">
                 {[
                   {label:"Total Assets",value:stats.total,icon:"🖥️",color:"#3b82f6",bg:"#eff6ff"},
                   {label:"IPs Assigned",value:stats.withIP,icon:"🌐",color:"#8b5cf6",bg:"#faf5ff"},
@@ -492,7 +525,7 @@ export default function App() {
               </div>
 
               {/* Table */}
-              <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",overflow:"hidden",marginBottom:16}}>
+              <div className="table-wrap" style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",overflow:"hidden"}} className="table-wrap" style={{,marginBottom:16}}>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",minWidth:900}}>
                     <thead>
@@ -697,8 +730,8 @@ export default function App() {
       {/* ── DETAIL MODAL ── */}
       {/* IP HISTORY MODAL */}
       {historyModal&&(
-        <div onClick={()=>setHistoryModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease"}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:720,maxHeight:"85vh",overflow:"auto",boxShadow:"0 25px 60px rgba(0,0,0,0.25)"}}>
+        <div onClick={()=>setHistoryModal(null)} className="resp-modal-wrap" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center"}} className="resp-modal-wrap" style={{,animation:"fadeIn 0.2s ease"}}>
+          <div onClick={e=>e.stopPropagation()} className="resp-modal" style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:720,maxHeight:"85vh",overflow:"auto",boxShadow:"0 25px 60px rgba(0,0,0,0.25)"}}>
             <div style={{background:"linear-gradient(135deg,#4c1d95,#7c3aed)",padding:"20px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:1}}>
               <div>
                 <div style={{color:"rgba(255,255,255,0.6)",fontSize:11,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>IP Usage History</div>
@@ -790,7 +823,7 @@ export default function App() {
 
       {detailItem&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease",padding:20}} onClick={()=>setDetailItem(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",overflow:"auto",boxShadow:"0 40px 80px rgba(0,0,0,0.35)",animation:"slideIn 0.3s ease"}}>
+          <div onClick={e=>e.stopPropagation()} className="resp-modal" style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",overflow:"auto",boxShadow:"0 40px 80px rgba(0,0,0,0.35)",animation:"slideIn 0.3s ease"}}>
             <div style={{background:"linear-gradient(135deg,#0a1628,#1e3a6e)",padding:"22px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{color:"rgba(200,168,75,0.9)",fontSize:11,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}>Asset #{detailItem.id}</div>
