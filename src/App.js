@@ -14,10 +14,10 @@ const INTERNET_OPTS = ["Yes","No",""];
 
 export default function App() {
   const [user, setUser] = useState(() => {
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
 
     try { const s = localStorage.getItem("inv_user"); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
