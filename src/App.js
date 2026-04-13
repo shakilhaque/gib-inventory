@@ -525,7 +525,7 @@ export default function App() {
               </div>
 
               {/* Table */}
-              <div className="table-wrap" style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",overflow:"hidden"}} className="table-wrap" style={{,marginBottom:16}}>
+              <div className="table-wrap" style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",overflow:"hidden",marginBottom:16}}>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",minWidth:900}}>
                     <thead>
@@ -730,7 +730,7 @@ export default function App() {
       {/* ── DETAIL MODAL ── */}
       {/* IP HISTORY MODAL */}
       {historyModal&&(
-        <div onClick={()=>setHistoryModal(null)} className="resp-modal-wrap" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center"}} className="resp-modal-wrap" style={{,animation:"fadeIn 0.2s ease"}}>
+        <div onClick={()=>setHistoryModal(null)} className="resp-modal-wrap" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",animation:"fadeIn 0.2s ease"}}>
           <div onClick={e=>e.stopPropagation()} className="resp-modal" style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:720,maxHeight:"85vh",overflow:"auto",boxShadow:"0 25px 60px rgba(0,0,0,0.25)"}}>
             <div style={{background:"linear-gradient(135deg,#4c1d95,#7c3aed)",padding:"20px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:1}}>
               <div>
